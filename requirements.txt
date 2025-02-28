@@ -1,0 +1,5 @@
+requests
+beautifulsoup4
+asyncpg
+aiogram==3.*
+python-dotenv
