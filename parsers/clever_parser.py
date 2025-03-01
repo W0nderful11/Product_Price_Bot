@@ -83,7 +83,6 @@ def parse_clevermarket():
 
                 code = product_url.split('/')[-1]
                 timestamp = datetime.now()
-
                 subcategory = title.split()[0].capitalize() if title.split() else "Не определена"
 
                 products.append({

@@ -2,12 +2,10 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 
-
 def apply_city(url, city):
     if "arbuz.kz" in url and "almaty" in url:
         return url.replace("almaty", city)
     return url
-
 
 BASE_URL_ARB = "https://arbuz.kz"
 
@@ -17,20 +15,17 @@ CATEGORY_LINKS_ARB = [
     {"category": "Молоко, сыр и яйца", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225161-moloko_syr_i_yaica#/"},
     {"category": "Мясо, птица и рыба", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225162-myaso_ptica_i_ryba#/"},
     {"category": "Фермерская лавка", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225268-fermerskaya_lavka#/"},
-    {"category": "Замороженные продукты",
-     "url": "https://arbuz.kz/ru/almaty/catalog/cat/225183-zamorozhennye_produkty#/"},
+    {"category": "Замороженные продукты", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225183-zamorozhennye_produkty#/"},
     {"category": "Хлеб и выпечка", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225165-hleb_i_vypechka#/"},
     {"category": "Колбасы и деликатесы", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225167-kolbasy_i_delikatesy#/"},
     {"category": "Бакалея", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225169-bakaleya#/"}
 ]
-
 
 def get_consolidated_subcategory(title):
     words = title.split()
     if not words:
         return "Не определена"
     return words[0].capitalize()
-
 
 def parse_arbuz(city="almaty"):
     products = []
@@ -65,7 +60,6 @@ def parse_arbuz(city="almaty"):
                     continue
                 price = price_elem.text.strip()
 
-                # Парсинг изображения: ищем тег <img> с классом "image"
                 img_tag = item.find("img", class_="image")
                 image = None
                 if img_tag:
@@ -77,7 +71,6 @@ def parse_arbuz(city="almaty"):
 
                 code = item.get("data-code")
                 timestamp = datetime.now()
-
                 subcategory = get_consolidated_subcategory(title)
 
                 products.append({
@@ -94,7 +87,6 @@ def parse_arbuz(city="almaty"):
             except Exception as e:
                 print(f"Ошибка парсинга товара в категории {main_category} (Арбуз): {e}")
     return products
-
 
 if __name__ == "__main__":
     for product in parse_arbuz():

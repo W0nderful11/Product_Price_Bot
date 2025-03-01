@@ -16,9 +16,7 @@ DATABASE_URL = (
 )
 
 database = databases.Database(DATABASE_URL)
-
 inline_router = Router()
-
 
 @inline_router.inline_query()
 async def inline_query_handler(query: types.InlineQuery):
@@ -26,6 +24,9 @@ async def inline_query_handler(query: types.InlineQuery):
     if not search_text:
         await query.answer([], switch_pm_text="Введите запрос", switch_pm_parameter="start")
         return
+
+    if not database.is_connected:
+        await database.connect()
 
     sql = """
         SELECT id, name, price, link, image
@@ -35,19 +36,16 @@ async def inline_query_handler(query: types.InlineQuery):
         LIMIT 10
     """
     values = {"pattern": f"%{search_text}%"}
-    if not database.is_connected:
-        await database.connect()
     rows = await database.fetch_all(query=sql, values=values)
 
     results = []
     for row in rows:
         thumb = row["image"] if row["image"] and "image-placeholder" not in row["image"] else None
-        # Включаем ID в сообщение
-        message_text = html.escape(f"ID: {row['id']}\n{row['name']} — {row['price']}\nСсылка: {row['link']}")
+        message_text = f"{html.escape(row['name'])} — {html.escape(row['price'])}\n<a href=\"{row['link']}\">Перейти</a>"
         results.append(
             types.InlineQueryResultArticle(
                 id=str(row["id"]),
-                title=html.escape(f"ID: {row['id']} - {row['name']}"),
+                title=html.escape(row["name"]),
                 input_message_content=types.InputTextMessageContent(message_text=message_text),
                 thumb_url=thumb
             )

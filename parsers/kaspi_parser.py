@@ -20,9 +20,7 @@ CATEGORY_LINKS_KASPI = [
     {"category": "АПТЕКА", "url": "https://kaspi.kz/shop/c/pharmacy/"}
 ]
 
-
 def parse_kaspi_selenium():
-    from selenium.webdriver.chrome.options import Options
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     driver = webdriver.Chrome(options=chrome_options)
@@ -87,7 +85,6 @@ def parse_kaspi_selenium():
                 print(f"Ошибка парсинга товара в категории {cat['category']}: {e}")
     driver.quit()
     return products
-
 
 parse_kaspi = parse_kaspi_selenium
 
