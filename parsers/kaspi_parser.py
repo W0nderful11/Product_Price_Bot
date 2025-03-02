@@ -9,15 +9,20 @@ import time
 
 BASE_URL_KASPI = "https://kaspi.kz"
 
+# Обновлённый список категорий для Kaspi – имена подобраны как в Arbuz,
+# а ссылки – взяты из предоставленного списка.
 CATEGORY_LINKS_KASPI = [
-    {"category": "ТЕЛЕФОНЫ И ГАДЖЕТЫ", "url": "https://kaspi.kz/shop/c/smartphones%20and%20gadgets/"},
-    {"category": "БЫТОВАЯ ТЕХНИКА", "url": "https://kaspi.kz/shop/c/home%20equipment/"},
-    {"category": "ТВ, АУДИО", "url": "https://kaspi.kz/shop/c/tv_audio/"},
-    {"category": "КОМПЬЮТЕРЫ", "url": "https://kaspi.kz/shop/c/computers/"},
-    {"category": "МЕБЕЛЬ", "url": "https://kaspi.kz/shop/c/furniture/"},
-    {"category": "КРАСОТА", "url": "https://kaspi.kz/shop/c/beauty%20care/"},
-    {"category": "ДЕТСКИЕ ТОВАРЫ", "url": "https://kaspi.kz/shop/c/child%20goods/"},
-    {"category": "АПТЕКА", "url": "https://kaspi.kz/shop/c/pharmacy/"}
+    {"category": "Скидки", "url": "https://kaspi.kz/shop/c/food/"},
+    {"category": "Молоко, сыр и яйца", "url": "https://kaspi.kz/shop/c/dairy%20and%20eggs/?q=%3Acategory%3ADairy%20and%20eggs%3AavailableInZones%3AMagnum_ZONE1&sort=relevance&sc="},
+    {"category": "Овощи, фрукты, зелень", "url": "https://kaspi.kz/shop/c/fruits%20and%20vegetables/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AFruits%20and%20vegetables&sort=relevance&sc="},
+    # Если требуется разбить выпечку на два запроса – можно использовать оба варианта под одним именем
+    {"category": "Хлеб и выпечка", "url": "https://kaspi.kz/shop/c/pastry/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3APastry&sort=relevance&sc="},
+    {"category": "Хлеб и выпечка", "url": "https://kaspi.kz/shop/c/bread%20and%20bakery/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3ABread%20and%20bakery&sort=relevance&sc="},
+    {"category": "Колбасы и деликатесы", "url": "https://kaspi.kz/shop/c/sausages%20and%20meat%20delicacies/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3ASausages%20and%20meat%20delicacies&sort=relevance&sc="},
+    # Для категорий «Мясо, птица и рыба» используем два запроса (например, для морепродуктов и для мяса)
+    {"category": "Мясо, птица и рыба", "url": "https://kaspi.kz/shop/c/seafood/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3ASeafood&sort=relevance&sc="},
+    {"category": "Мясо, птица и рыба", "url": "https://kaspi.kz/shop/c/meat%20and%20poultry/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AMeat%20and%20poultry&sort=relevance&sc="},
+    {"category": "Бакалея", "url": "https://kaspi.kz/shop/c/everything%20for%20baking/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AEverything%20for%20baking&sort=relevance&sc="}
 ]
 
 def parse_kaspi_selenium():
@@ -27,7 +32,7 @@ def parse_kaspi_selenium():
 
     products = []
     for cat in CATEGORY_LINKS_KASPI:
-        print(f"Парсинг категории: {cat['category']}")
+        print(f"Парсинг категории: {cat['category']} - {cat['url']}")
         try:
             driver.get(cat["url"])
             WebDriverWait(driver, 10).until(
@@ -68,6 +73,7 @@ def parse_kaspi_selenium():
                     link = BASE_URL_KASPI + link
                 price_tag = card.find("span", class_="item-card__prices-price")
                 price = price_tag.text.strip() if price_tag else "0"
+                # Используем первое слово из названия для определения подкатегории
                 subcategory = name.split()[0].capitalize() if name.split() else "Не определена"
                 timestamp = datetime.now()
                 products.append({
