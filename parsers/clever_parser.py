@@ -3,6 +3,7 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+from utils import get_subcategory  # Импорт универсальной функции
 
 chrome_options = Options()
 chrome_options.add_argument("--headless")
@@ -83,7 +84,8 @@ def parse_clevermarket():
 
                 code = product_url.split('/')[-1]
                 timestamp = datetime.now()
-                subcategory = title.split()[0].capitalize() if title.split() else "Не определена"
+                # Используем универсальную функцию для определения подкатегории
+                subcategory = get_subcategory(title)
 
                 products.append({
                     "code": code,

@@ -18,10 +18,11 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 import os
 from aiogram.client.bot import DefaultBotProperties
-
+from aiogram.filters.state import StatesGroup, State
 from parsers import parse_all  # Функция из parsers/__init__.py
 from db import create_pool, init_db, save_products
 from inline_handler import inline_router  # Inline-обработчик для инлайн-запросов
+from search_handlers import search_router
 
 # Загружаем переменные окружения из .env
 load_dotenv()
@@ -33,30 +34,27 @@ storage = MemoryStorage()
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
 dp = Dispatcher(storage=storage)
 dp.include_router(inline_router)
+dp.include_router(search_router)
 
 # Глобальные переменные
-BASKETS = {}         # {user_id: [id товара, ...]}
-USER_CITIES = {}     # {user_id: "almaty", "astana", "shymkent", ...}
-ORDER_HISTORY = {}   # {user_id: [id товара, ...]} – история заказов
-
-
-# Маппинги для категорий и подкатегорий (работаем с разделом "Продукты")
+BASKETS = {}
+USER_CITIES = {}
+ORDER_HISTORY = {}
 CATEGORY_ID_MAP = {'Продукты': {}}
 CATEGORY_NAME_MAP = {'Продукты': {}}
 SUBCATEGORY_ID_MAP = {'Продукты': {}}
 SUBCATEGORY_NAME_MAP = {'Продукты': {}}
 MAPPINGS_LOADED = False
-
-# Количество товарных блоков на страницу
 PRODUCTS_PER_PAGE = 5
 
-# Функция для автоудаления сообщений:
+# Вспомогательные функции:
 async def delete_message_later(chat_id, message_id, delay=120):
     await asyncio.sleep(delay)
     try:
         await bot.delete_message(chat_id, message_id)
     except Exception as e:
         logging.error(f"Ошибка удаления сообщения {message_id} в чате {chat_id}: {e}")
+
 
 # Объявление FSM-состояний
 class AiState(StatesGroup):
@@ -68,6 +66,7 @@ class AddProductState(StatesGroup):
 class RemoveProductState(StatesGroup):
     waiting_for_remove_id = State()
 
+
 # Callback-обработчик для повторного заказа:
 @dp.callback_query(lambda c: c.data == "repeat_order")
 async def repeat_order_handler(callback_query: types.CallbackQuery):
@@ -78,12 +77,35 @@ async def repeat_order_handler(callback_query: types.CallbackQuery):
     else:
         await callback_query.answer("История заказа не найдена.", show_alert=True)
 
+@dp.callback_query(lambda c: c.data == "history")
+async def history_callback_handler(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    if user_id not in ORDER_HISTORY or not ORDER_HISTORY[user_id]:
+        await callback_query.answer("У вас нет сохранённого заказа.", show_alert=True)
+        return
+    last_order = ORDER_HISTORY[user_id]
+    order_text = "Ваш последний заказ (ID товаров): " + ", ".join(map(str, last_order))
+    repeat_button = InlineKeyboardButton(text="Сделать такой же заказ", callback_data="repeat_order")
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[repeat_button]])
+    await bot.send_message(callback_query.message.chat.id, order_text, reply_markup=keyboard)
+    await callback_query.answer()
+
 # Обработчики для удаления товара из корзины:
 @dp.callback_query(lambda c: c.data == "remove_item")
 async def remove_item_handler(callback_query: types.CallbackQuery, state: FSMContext):
     await state.set_state(RemoveProductState.waiting_for_remove_id)
     await callback_query.message.answer("Введите ID товара для удаления из корзины:")
     await callback_query.answer()
+
+
+
+@dp.callback_query(lambda c: c.data == "add")
+async def add_callback_handler(callback_query: types.CallbackQuery, state: FSMContext):
+    # Переходим в состояние добавления товаров, как в команде /add
+    await state.set_state(AddProductState.waiting_for_product_id)
+    await callback_query.message.answer("Введите ID товара(ов) для добавления в корзину (через пробел):")
+    await callback_query.answer()
+
 
 @dp.message(RemoveProductState.waiting_for_remove_id)
 async def process_remove_item(message: types.Message, state: FSMContext):
@@ -232,8 +254,8 @@ async def start_handler(message: types.Message):
 
 @dp.message(lambda message: message.content_type == ContentType.CONTACT)
 async def contact_handler(message: types.Message):
-    """Обработка контакта пользователя."""
     await message.answer("Спасибо за регистрацию!")
+
 
 @dp.message(Command("support"))
 async def support_handler(message: types.Message):
@@ -596,7 +618,9 @@ async def basket_handler(message: types.Message):
         buttons.append(InlineKeyboardButton(text="Продолжить", callback_data=f"basket:{new_offset}"))
     # Добавляем кнопку "Удалить товар"
     buttons.append(InlineKeyboardButton(text="Удалить товар", callback_data="remove_item"))
-    buttons.append(InlineKeyboardButton(text="Назад", callback_data="basket_back"))
+    # Добавляем кнопку "История заказов"
+    buttons.append(InlineKeyboardButton(text="История заказов", callback_data="history"))
+    buttons.append(InlineKeyboardButton(text="Добавить товар", callback_data="add"))
     keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons])
     photo_url = get_first_available_photo(items)
     try:
@@ -707,10 +731,6 @@ async def process_add_product(message: types.Message, state: FSMContext):
 
 @dp.message(Command("order"))
 async def order_handler(message: types.Message):
-    """
-    Обработчик команды /order.
-    Формирует заказ на основе товаров в корзине и отправляет кликабельную ссылку для оформления.
-    """
     user_id = message.from_user.id
     basket = BASKETS.get(user_id, [])
     if not basket:
@@ -725,14 +745,16 @@ async def order_handler(message: types.Message):
                 order_items.append(row["link"])
     await pool.close()
     order_url = "https://example.com/order?items=" + ",".join(order_items)
+    # Сохраняем заказ в истории
+    ORDER_HISTORY[user_id] = basket.copy()
     await message.answer(f"Ваш заказ сформирован:\n<a href=\"{order_url}\">Оформить заказ</a>")
 
 @dp.message(Command("history"))
 async def history_handler(message: types.Message):
     """
     Обработчик команды /history.
-    Возвращает последний сохранённый заказ из ORDER_HISTORY.
-    Если заказ найден, выводится список ID товаров, а также кнопка для повторного заказа.
+    Возвращает последний сохранённый заказ (список ID товаров) из ORDER_HISTORY,
+    а также отправляет кнопку для повторного заказа.
     """
     user_id = message.from_user.id
     if user_id not in ORDER_HISTORY or not ORDER_HISTORY[user_id]:
@@ -742,7 +764,6 @@ async def history_handler(message: types.Message):
 
     last_order = ORDER_HISTORY[user_id]
     order_text = "Ваш последний заказ (ID товаров): " + ", ".join(map(str, last_order))
-    # Кнопка для повторного заказа (используется тот же callback "repeat_order")
     repeat_button = InlineKeyboardButton(text="Сделать такой же заказ", callback_data="repeat_order")
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[repeat_button]])
     sent = await message.answer(order_text, reply_markup=keyboard)
@@ -760,6 +781,41 @@ async def ai_command_handler(message: types.Message, state: FSMContext):
         "Введите запрос для AI:"
     )
     await message.answer(context_text)
+
+@dp.callback_query(lambda c: c.data == "menu")
+async def menu_callback_handler(callback_query: types.CallbackQuery):
+    # Здесь можно вызвать функцию, которая выводит меню продуктов,
+    # например, вызвать уже существующий обработчик команды /menu
+    await menu_handler(callback_query.message)
+    await callback_query.answer("Вы выбрали меню продуктов!")
+
+@dp.callback_query(lambda c: c.data == "support")
+async def support_callback_handler(callback_query: types.CallbackQuery):
+    # Вызываем обработчик команды /support, передавая сообщение из callback
+    await support_handler(callback_query.message)
+    await callback_query.answer("Связь с админом.")
+
+@dp.callback_query(lambda c: c.data == "basket")
+async def basket_callback_handler(callback_query: types.CallbackQuery):
+    # Вызываем обработчик для просмотра корзины
+    await basket_handler(callback_query.message)
+    await callback_query.answer()
+
+@dp.callback_query(lambda c: c.data == "ai")
+async def ai_callback_handler(callback_query: types.CallbackQuery):
+    # Вызываем обработчик команды /ai, можно просто отправить сообщение с инструкцией,
+    # либо вызвать функцию ai_command_handler (но она ожидает FSMState)
+    await callback_query.answer("Для запроса к ИИ используйте команду /ai.", show_alert=True)
+@dp.callback_query(lambda c: c.data == "repeat_order")
+async def repeat_order_callback_handler(callback_query: types.CallbackQuery):
+    # Повторяем предыдущий заказ (код уже есть)
+    user_id = callback_query.from_user.id
+    if user_id in ORDER_HISTORY:
+        BASKETS[user_id] = ORDER_HISTORY[user_id].copy()
+        await callback_query.answer("Заказ повторён – теперь он в корзине.", show_alert=True)
+    else:
+        await callback_query.answer("История заказа не найдена.", show_alert=True)
+
 
 @dp.message(AiState.waiting_for_query)
 async def process_ai_request(message: types.Message, state: FSMContext):

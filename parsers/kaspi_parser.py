@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
+from utils import get_subcategory
 
 BASE_URL_KASPI = "https://kaspi.kz"
 
@@ -74,7 +75,7 @@ def parse_kaspi_selenium():
                 price_tag = card.find("span", class_="item-card__prices-price")
                 price = price_tag.text.strip() if price_tag else "0"
                 # Используем первое слово из названия для определения подкатегории
-                subcategory = name.split()[0].capitalize() if name.split() else "Не определена"
+                subcategory = get_subcategory(name)
                 timestamp = datetime.now()
                 products.append({
                     "code": code,

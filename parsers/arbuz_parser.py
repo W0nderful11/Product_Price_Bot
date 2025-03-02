@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
+from utils import get_subcategory  # Импорт универсальной функции
 
 def apply_city(url, city):
     if "arbuz.kz" in url and "almaty" in url:
@@ -20,12 +21,6 @@ CATEGORY_LINKS_ARB = [
     {"category": "Колбасы и деликатесы", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225167-kolbasy_i_delikatesy#/"},
     {"category": "Бакалея", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225169-bakaleya#/"}
 ]
-
-def get_consolidated_subcategory(title):
-    words = title.split()
-    if not words:
-        return "Не определена"
-    return words[0].capitalize()
 
 def parse_arbuz(city="almaty"):
     products = []
@@ -71,7 +66,8 @@ def parse_arbuz(city="almaty"):
 
                 code = item.get("data-code")
                 timestamp = datetime.now()
-                subcategory = get_consolidated_subcategory(title)
+                # Используем универсальную функцию для определения подкатегории
+                subcategory = get_subcategory(title)
 
                 products.append({
                     "code": code,
