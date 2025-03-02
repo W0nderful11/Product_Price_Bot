@@ -365,7 +365,7 @@ async def compare_handler(message: types.Message):
         rows = await conn.fetch("""
             SELECT subcategory, array_agg(DISTINCT source) AS sources
             FROM products
-            WHERE source IN ('Арбуз', 'CleverMarket')
+            WHERE source IN ('Арбуз', 'CleverMarket', 'Magnum')
             GROUP BY subcategory
             HAVING COUNT(DISTINCT source) > 1
             ORDER BY subcategory;
