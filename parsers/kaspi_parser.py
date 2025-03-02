@@ -83,7 +83,7 @@ def parse_kaspi_selenium():
                     "category": cat["category"],
                     "subcategory": subcategory,
                     "timestamp": timestamp,
-                    "source": "Kaspi",
+                    "source": "Magnum",
                     "image": image,
                     "link": link
                 })
