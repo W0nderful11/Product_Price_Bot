@@ -37,6 +37,8 @@ dp.include_router(inline_router)
 # Глобальные переменные
 BASKETS = {}         # {user_id: [id товара, ...]}
 USER_CITIES = {}     # {user_id: "almaty", "astana", "shymkent", ...}
+ORDER_HISTORY = {}   # {user_id: [id товара, ...]} – история заказов
+
 
 # Маппинги для категорий и подкатегорий (работаем с разделом "Продукты")
 CATEGORY_ID_MAP = {'Продукты': {}}
@@ -47,6 +49,56 @@ MAPPINGS_LOADED = False
 
 # Количество товарных блоков на страницу
 PRODUCTS_PER_PAGE = 5
+
+# Функция для автоудаления сообщений:
+async def delete_message_later(chat_id, message_id, delay=120):
+    await asyncio.sleep(delay)
+    try:
+        await bot.delete_message(chat_id, message_id)
+    except Exception as e:
+        logging.error(f"Ошибка удаления сообщения {message_id} в чате {chat_id}: {e}")
+
+# Объявление FSM-состояний
+class AiState(StatesGroup):
+    waiting_for_query = State()
+
+class AddProductState(StatesGroup):
+    waiting_for_product_id = State()
+
+class RemoveProductState(StatesGroup):
+    waiting_for_remove_id = State()
+
+# Callback-обработчик для повторного заказа:
+@dp.callback_query(lambda c: c.data == "repeat_order")
+async def repeat_order_handler(callback_query: types.CallbackQuery):
+    user_id = callback_query.from_user.id
+    if user_id in ORDER_HISTORY:
+        BASKETS[user_id] = ORDER_HISTORY[user_id].copy()
+        await callback_query.answer("Заказ повторён – теперь он в корзине.", show_alert=True)
+    else:
+        await callback_query.answer("История заказа не найдена.", show_alert=True)
+
+# Обработчики для удаления товара из корзины:
+@dp.callback_query(lambda c: c.data == "remove_item")
+async def remove_item_handler(callback_query: types.CallbackQuery, state: FSMContext):
+    await state.set_state(RemoveProductState.waiting_for_remove_id)
+    await callback_query.message.answer("Введите ID товара для удаления из корзины:")
+    await callback_query.answer()
+
+@dp.message(RemoveProductState.waiting_for_remove_id)
+async def process_remove_item(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    try:
+        remove_id = int(message.text.strip())
+    except ValueError:
+        await message.answer("ID должен быть числом. Попробуйте ещё раз.")
+        return
+    if user_id in BASKETS and remove_id in BASKETS[user_id]:
+        BASKETS[user_id].remove(remove_id)
+        await message.answer(f"Товар с ID {remove_id} удалён из корзины.")
+    else:
+        await message.answer("Товар с таким ID не найден в корзине.")
+    await state.clear()
 
 def get_user_city(user_id):
     """Возвращает выбранный город для пользователя, по умолчанию 'almaty'."""
@@ -240,12 +292,12 @@ async def load_category_mappings():
     pool = await create_pool()
     async with pool.acquire() as conn:
         prod_categories = await conn.fetch(
-            "SELECT DISTINCT category FROM products WHERE source IN ('Арбуз', 'CleverMarket') ORDER BY category;"
+            "SELECT DISTINCT category FROM products WHERE source IN ('Арбуз', 'CleverMarket', 'Kaspi') ORDER BY category;"
         )
         CATEGORY_ID_MAP['Продукты'] = {row['category']: i for i, row in enumerate(prod_categories)}
         CATEGORY_NAME_MAP['Продукты'] = {i: row['category'] for i, row in enumerate(prod_categories)}
         prod_subcategories = await conn.fetch(
-            "SELECT DISTINCT category, subcategory FROM products WHERE source IN ('Арбуз', 'CleverMarket') GROUP BY category, subcategory;"
+            "SELECT DISTINCT category, subcategory FROM products WHERE source IN ('Арбуз', 'CleverMarket', 'Kaspi') GROUP BY category, subcategory;"
         )
         SUBCATEGORY_ID_MAP['Продукты'] = {}
         SUBCATEGORY_NAME_MAP['Продукты'] = {}
@@ -280,7 +332,7 @@ async def main_category_callback_handler(callback_query: types.CallbackQuery):
     pool = await create_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT DISTINCT category FROM products WHERE source IN ('Арбуз', 'CleverMarket') ORDER BY category;"
+            "SELECT DISTINCT category FROM products WHERE source IN ('Арбуз', 'CleverMarket', 'Kaspi') ORDER BY category;"
         )
     await pool.close()
     if not rows:
@@ -324,7 +376,7 @@ async def category_callback_handler(callback_query: types.CallbackQuery):
     pool = await create_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT DISTINCT subcategory FROM products WHERE source IN ('Арбуз', 'CleverMarket') AND category = $1 ORDER BY subcategory;",
+            "SELECT DISTINCT subcategory FROM products WHERE source IN ('Арбуз', 'CleverMarket', 'Kaspi') AND category = $1 ORDER BY subcategory;",
             category
         )
     await pool.close()
@@ -365,7 +417,7 @@ async def compare_handler(message: types.Message):
         rows = await conn.fetch("""
             SELECT subcategory, array_agg(DISTINCT source) AS sources
             FROM products
-            WHERE source IN ('Арбуз', 'CleverMarket', 'Magnum')
+            WHERE source IN ('Арбуз', 'CleverMarket', 'Kaspi')
             GROUP BY subcategory
             HAVING COUNT(DISTINCT source) > 1
             ORDER BY subcategory;
@@ -500,24 +552,20 @@ async def compare_back_callback_handler(callback_query: types.CallbackQuery):
 # --- Команда /basket – просмотр корзины товаров ---
 @dp.message(Command("basket"))
 async def basket_handler(message: types.Message):
-    """
-    Обработчик команды /basket.
-    Отображает содержимое корзины пользователя с пагинацией.
-    """
     user_id = message.from_user.id
     basket = BASKETS.get(user_id, [])
     if not basket:
-        await message.answer("Ваша корзина пуста.")
+        sent = await message.answer("Ваша корзина пуста.")
+        asyncio.create_task(delete_message_later(sent.chat.id, sent.message_id))
         return
     pool = await create_pool()
     items = []
     async with pool.acquire() as conn:
         for prod_id in basket:
-            row = await conn.fetchrow("""
-                SELECT id, name, price, source, timestamp, link, image
-                FROM products
-                WHERE id = $1;
-            """, prod_id)
+            row = await conn.fetchrow(
+                "SELECT id, name, price, source, timestamp, link, image FROM products WHERE id = $1;",
+                prod_id
+            )
             if row:
                 items.append(row)
     await pool.close()
@@ -539,7 +587,6 @@ async def basket_handler(message: types.Message):
         )
         blocks.append(block)
     total_blocks = len(blocks)
-    # Начинаем с offset=0
     offset = 0
     page_blocks = blocks[offset: offset + PRODUCTS_PER_PAGE]
     page_text = "<b>Ваша корзина:</b>\n\n" + "\n\n".join(page_blocks)
@@ -547,16 +594,16 @@ async def basket_handler(message: types.Message):
     buttons = []
     if new_offset < total_blocks:
         buttons.append(InlineKeyboardButton(text="Продолжить", callback_data=f"basket:{new_offset}"))
+    # Добавляем кнопку "Удалить товар"
+    buttons.append(InlineKeyboardButton(text="Удалить товар", callback_data="remove_item"))
     buttons.append(InlineKeyboardButton(text="Назад", callback_data="basket_back"))
     keyboard = InlineKeyboardMarkup(inline_keyboard=[buttons])
     photo_url = get_first_available_photo(items)
     try:
-        if photo_url:
-            await message.answer_photo(photo=photo_url, caption=page_text, parse_mode="HTML", reply_markup=keyboard)
-        else:
-            await message.answer(page_text, parse_mode="HTML", reply_markup=keyboard)
+        sent = await message.answer_photo(photo=photo_url, caption=page_text, parse_mode="HTML", reply_markup=keyboard)
     except Exception:
-        await message.answer(page_text, parse_mode="HTML", reply_markup=keyboard)
+        sent = await message.answer(page_text, parse_mode="HTML", reply_markup=keyboard)
+    asyncio.create_task(delete_message_later(sent.chat.id, sent.message_id))
 
 @dp.callback_query(lambda c: c.data and c.data.startswith("basket:"))
 async def basket_pagination_handler(callback_query: types.CallbackQuery):
@@ -679,6 +726,27 @@ async def order_handler(message: types.Message):
     await pool.close()
     order_url = "https://example.com/order?items=" + ",".join(order_items)
     await message.answer(f"Ваш заказ сформирован:\n<a href=\"{order_url}\">Оформить заказ</a>")
+
+@dp.message(Command("history"))
+async def history_handler(message: types.Message):
+    """
+    Обработчик команды /history.
+    Возвращает последний сохранённый заказ из ORDER_HISTORY.
+    Если заказ найден, выводится список ID товаров, а также кнопка для повторного заказа.
+    """
+    user_id = message.from_user.id
+    if user_id not in ORDER_HISTORY or not ORDER_HISTORY[user_id]:
+        sent = await message.answer("У вас нет сохранённого заказа.")
+        asyncio.create_task(delete_message_later(sent.chat.id, sent.message_id))
+        return
+
+    last_order = ORDER_HISTORY[user_id]
+    order_text = "Ваш последний заказ (ID товаров): " + ", ".join(map(str, last_order))
+    # Кнопка для повторного заказа (используется тот же callback "repeat_order")
+    repeat_button = InlineKeyboardButton(text="Сделать такой же заказ", callback_data="repeat_order")
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[repeat_button]])
+    sent = await message.answer(order_text, reply_markup=keyboard)
+    asyncio.create_task(delete_message_later(sent.chat.id, sent.message_id))
 
 @dp.message(Command("ai"))
 async def ai_command_handler(message: types.Message, state: FSMContext):
