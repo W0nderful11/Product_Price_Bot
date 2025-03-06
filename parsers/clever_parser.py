@@ -16,11 +16,11 @@ driver = webdriver.Chrome(options=chrome_options)
 BASE_URL_CLEVER = "https://clevermarket.kz"
 
 CATEGORY_LINKS_CLEVER = [
-    {"category": "Хлеб", "url": "https://clevermarket.kz/supermarket/catalog/Khleb/1151"},
+    {"category": "Хлеб и выпечка", "url": "https://clevermarket.kz/supermarket/catalog/Khleb/1151"},
     {"category": "Овощи, фрукты, зелень", "url": "https://clevermarket.kz/supermarket/catalog/Ovoshchi-zelen-gribi-solenya/1089"},
     {"category": "Молоко, сыр и яйца", "url": "https://clevermarket.kz/supermarket/catalog/Molochnie-produkti-yaitso/1118"},
     {"category": "Сыры", "url": "https://clevermarket.kz/supermarket/catalog/Siri/1135"},
-    {"category": "Выпечка", "url": "https://clevermarket.kz/supermarket/catalog/Pasta-makaroni-lapsha/2225"},
+    {"category": "Хлеб и выпечка", "url": "https://clevermarket.kz/supermarket/catalog/Pasta-makaroni-lapsha/2225"},
     {"category": "Колбасы и деликатесы", "url": "https://clevermarket.kz/supermarket/catalog/Kolbasi/1186"},
     {"category": "Фрукты, ягоды", "url": "https://clevermarket.kz/supermarket/catalog/Frukti-yagodi/1090"},
     {"category": "Мясо, птица и рыба", "url": "https://clevermarket.kz/supermarket/catalog/Myaso-ptitsa/1162"},
@@ -72,19 +72,19 @@ def parse_clevermarket():
                     continue
                 price = price_tag.get_text(strip=True)
 
+                # Исправление получения изображения: сначала проверяем data-src, затем src
                 img_tag = a_tag.find("img")
                 image = None
                 if img_tag:
-                    image = img_tag.get("src") or img_tag.get("data-src")
+                    image = img_tag.get("data-src") or img_tag.get("src")
                     if image and "image-placeholder" in image:
                         time.sleep(1)
-                        image = img_tag.get("src") or img_tag.get("data-src")
+                        image = img_tag.get("data-src") or img_tag.get("src")
                         if image and "image-placeholder" in image:
                             image = None
 
                 code = product_url.split('/')[-1]
                 timestamp = datetime.now()
-                # Используем универсальную функцию для определения подкатегории
                 subcategory = get_subcategory(title)
 
                 products.append({

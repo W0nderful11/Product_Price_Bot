@@ -10,17 +10,13 @@ from utils import get_subcategory
 
 BASE_URL_KASPI = "https://kaspi.kz"
 
-# Обновлённый список категорий для Kaspi – имена подобраны как в Arbuz,
-# а ссылки – взяты из предоставленного списка.
 CATEGORY_LINKS_KASPI = [
     {"category": "Скидки", "url": "https://kaspi.kz/shop/c/food/"},
     {"category": "Молоко, сыр и яйца", "url": "https://kaspi.kz/shop/c/dairy%20and%20eggs/?q=%3Acategory%3ADairy%20and%20eggs%3AavailableInZones%3AMagnum_ZONE1&sort=relevance&sc="},
     {"category": "Овощи, фрукты, зелень", "url": "https://kaspi.kz/shop/c/fruits%20and%20vegetables/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AFruits%20and%20vegetables&sort=relevance&sc="},
-    # Если требуется разбить выпечку на два запроса – можно использовать оба варианта под одним именем
     {"category": "Хлеб и выпечка", "url": "https://kaspi.kz/shop/c/pastry/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3APastry&sort=relevance&sc="},
     {"category": "Хлеб и выпечка", "url": "https://kaspi.kz/shop/c/bread%20and%20bakery/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3ABread%20and%20bakery&sort=relevance&sc="},
     {"category": "Колбасы и деликатесы", "url": "https://kaspi.kz/shop/c/sausages%20and%20meat%20delicacies/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3ASausages%20and%20meat%20delicacies&sort=relevance&sc="},
-    # Для категорий «Мясо, птица и рыба» используем два запроса (например, для морепродуктов и для мяса)
     {"category": "Мясо, птица и рыба", "url": "https://kaspi.kz/shop/c/seafood/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3ASeafood&sort=relevance&sc="},
     {"category": "Мясо, птица и рыба", "url": "https://kaspi.kz/shop/c/meat%20and%20poultry/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AMeat%20and%20poultry&sort=relevance&sc="},
     {"category": "Бакалея", "url": "https://kaspi.kz/shop/c/everything%20for%20baking/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AEverything%20for%20baking&sort=relevance&sc="}
@@ -63,6 +59,7 @@ def parse_kaspi_selenium():
         for card in cards:
             try:
                 code = card.get("data-product-id")
+                # Исправление получения изображения: для Kaspi используем атрибут src
                 image_tag = card.find("a", class_="item-card__image-wrapper").find("img")
                 image = None
                 if image_tag:
@@ -74,7 +71,6 @@ def parse_kaspi_selenium():
                     link = BASE_URL_KASPI + link
                 price_tag = card.find("span", class_="item-card__prices-price")
                 price = price_tag.text.strip() if price_tag else "0"
-                # Используем первое слово из названия для определения подкатегории
                 subcategory = get_subcategory(name)
                 timestamp = datetime.now()
                 products.append({

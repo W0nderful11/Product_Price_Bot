@@ -1,9 +1,10 @@
 import html
+import os
+from dotenv import load_dotenv
+
 from aiogram import types
 from aiogram.dispatcher.router import Router
 from db import create_pool
-from dotenv import load_dotenv
-import os
 import databases
 
 load_dotenv()
@@ -18,11 +19,16 @@ DATABASE_URL = (
 database = databases.Database(DATABASE_URL)
 inline_router = Router()
 
+
 @inline_router.inline_query()
 async def inline_query_handler(query: types.InlineQuery):
     search_text = query.query.strip()
     if not search_text:
-        await query.answer([], switch_pm_text="Введите запрос", switch_pm_parameter="start")
+        await query.answer(
+            [],
+            switch_pm_text="Введите запрос",
+            switch_pm_parameter="start"
+        )
         return
 
     if not database.is_connected:
@@ -41,12 +47,17 @@ async def inline_query_handler(query: types.InlineQuery):
     results = []
     for row in rows:
         thumb = row["image"] if row["image"] and "image-placeholder" not in row["image"] else None
-        message_text = f"{html.escape(row['name'])} — {html.escape(row['price'])}\n<a href=\"{row['link']}\">Перейти</a>"
+        message_text = (
+            f"{html.escape(row['name'])} — {html.escape(row['price'])}\n"
+            f"<a href=\"{row['link']}\">Перейти</a>"
+        )
         results.append(
             types.InlineQueryResultArticle(
                 id=str(row["id"]),
                 title=html.escape(row["name"]),
-                input_message_content=types.InputTextMessageContent(message_text=message_text),
+                input_message_content=types.InputTextMessageContent(
+                    message_text=message_text
+                ),
                 thumb_url=thumb
             )
         )

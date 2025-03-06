@@ -1,7 +1,8 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-from utils import get_subcategory  # Импорт универсальной функции
+from utils import get_subcategory
+from html import unescape
 
 def apply_city(url, city):
     if "arbuz.kz" in url and "almaty" in url:
@@ -59,16 +60,15 @@ def parse_arbuz(city="almaty"):
                 image = None
                 if img_tag:
                     image = img_tag.get("src")
-
+                    if image:
+                        image = unescape(image)
+                        image = image.replace("%w", "600").replace("%h", "600")
                 link = a_tag.get("href")
                 if link and not link.startswith("http"):
                     link = BASE_URL_ARB + link
-
                 code = item.get("data-code")
                 timestamp = datetime.now()
-                # Используем универсальную функцию для определения подкатегории
                 subcategory = get_subcategory(title)
-
                 products.append({
                     "code": code,
                     "name": title,
