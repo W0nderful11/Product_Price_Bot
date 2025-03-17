@@ -1,7 +1,11 @@
+import spacy
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-from utils import get_subcategory
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
+from helper import get_subcategory
 from html import unescape
 
 def apply_city(url, city):
@@ -22,6 +26,8 @@ CATEGORY_LINKS_ARB = [
     {"category": "Колбасы и деликатесы", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225167-kolbasy_i_delikatesy#/"},
     {"category": "Бакалея", "url": "https://arbuz.kz/ru/almaty/catalog/cat/225169-bakaleya#/"}
 ]
+
+nlp = spacy.load("ru_core_news_sm")
 
 def parse_arbuz(city="almaty"):
     products = []
@@ -68,7 +74,7 @@ def parse_arbuz(city="almaty"):
                     link = BASE_URL_ARB + link
                 code = item.get("data-code")
                 timestamp = datetime.now()
-                subcategory = get_subcategory(title)
+                subcategory = get_subcategory(title, nlp)
                 products.append({
                     "code": code,
                     "name": title,

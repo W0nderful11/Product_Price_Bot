@@ -3,14 +3,15 @@ from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
-from utils import get_subcategory  # Импорт универсальной функции
+import spacy
+from parsers.helper import get_subcategory
 
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
-
+nlp = spacy.load("ru_core_news_sm")
 driver = webdriver.Chrome(options=chrome_options)
 
 BASE_URL_CLEVER = "https://clevermarket.kz"
@@ -72,7 +73,6 @@ def parse_clevermarket():
                     continue
                 price = price_tag.get_text(strip=True)
 
-                # Исправление получения изображения: сначала проверяем data-src, затем src
                 img_tag = a_tag.find("img")
                 image = None
                 if img_tag:
@@ -85,7 +85,7 @@ def parse_clevermarket():
 
                 code = product_url.split('/')[-1]
                 timestamp = datetime.now()
-                subcategory = get_subcategory(title)
+                subcategory = get_subcategory(title, nlp)
 
                 products.append({
                     "code": code,

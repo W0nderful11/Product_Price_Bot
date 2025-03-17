@@ -38,47 +38,10 @@ def get_search_mode_keyboard():
     ])
 
 
-# Обработка нажатия "Поиск товара"
-@search_router.callback_query(F.data == "search")
+@search_router.callback_query(lambda c: c.data == "search")
 async def search_callback_handler(callback: types.CallbackQuery):
     await callback.message.answer("Выберите режим поиска:", reply_markup=get_search_mode_keyboard())
-
-
-# Обработка выбора магазина
-@search_router.callback_query(F.data.startswith('search_'))
-async def search_by_store(callback: types.CallbackQuery, state: FSMContext):
-    store = callback.data.replace('search_', '')
-    await state.update_data(search_store=store)
-
-    if store == 'compare':
-        await callback.message.answer("Введите название товара для сравнения во всех магазинах:")
-    else:
-        await callback.message.answer(f"Введите название товара для поиска в {store.capitalize()}:")
-
-    await state.set_state(SearchStates.waiting_for_search_query)
-
-
-# Обработка ввода товара и вызов нужного парсера
-@search_router.message(F.text, SearchStates.waiting_for_search_query)
-async def process_search_query(message: types.Message, state: FSMContext):
-    data = await state.get_data()
-    store = data.get('search_store')
-    query = message.text.strip()
-
-    if store == 'arbuz':
-        result = await parse_arbuz(query)
-    elif store == 'klever':
-        result = await parse_clevermarket(query)
-    elif store == 'kaspi':
-        result = await parse_kaspi(query)
-    elif store == 'compare':
-        result = await compare_prices(query)
-    else:
-        result = "Неизвестный магазин."
-
-    await message.answer(result)
-    await state.clear()
-
+    await callback.answer()
 
 # Функция для сравнения цен
 async def compare_prices(query):

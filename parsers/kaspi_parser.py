@@ -6,7 +6,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 from datetime import datetime
 import time
-from utils import get_subcategory
+import spacy
+from parsers.helper import get_subcategory
 
 BASE_URL_KASPI = "https://kaspi.kz"
 
@@ -21,6 +22,7 @@ CATEGORY_LINKS_KASPI = [
     {"category": "Мясо, птица и рыба", "url": "https://kaspi.kz/shop/c/meat%20and%20poultry/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AMeat%20and%20poultry&sort=relevance&sc="},
     {"category": "Бакалея", "url": "https://kaspi.kz/shop/c/everything%20for%20baking/?q=%3AavailableInZones%3AMagnum_ZONE1%3Acategory%3AEverything%20for%20baking&sort=relevance&sc="}
 ]
+nlp = spacy.load("ru_core_news_sm")
 
 def parse_kaspi_selenium():
     chrome_options = Options()
@@ -59,7 +61,6 @@ def parse_kaspi_selenium():
         for card in cards:
             try:
                 code = card.get("data-product-id")
-                # Исправление получения изображения: для Kaspi используем атрибут src
                 image_tag = card.find("a", class_="item-card__image-wrapper").find("img")
                 image = None
                 if image_tag:
@@ -71,7 +72,7 @@ def parse_kaspi_selenium():
                     link = BASE_URL_KASPI + link
                 price_tag = card.find("span", class_="item-card__prices-price")
                 price = price_tag.text.strip() if price_tag else "0"
-                subcategory = get_subcategory(name)
+                subcategory = get_subcategory(name, nlp)
                 timestamp = datetime.now()
                 products.append({
                     "code": code,
